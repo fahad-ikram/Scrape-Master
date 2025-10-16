@@ -87,17 +87,40 @@ def fetch_url(url, timeout=20):
         return ''
 
 # Extract article links by class name
-def get_article_links_from_page(html, class_name, base_url=None):
+def get_article_links_from_page(html, base_url=None):
+    """
+    Automatically find internal article links without CSS class or pattern.
+    - Keeps only same-domain links.
+    - Skips contact/about/etc. pages.
+    - Keeps only links longer than base_url + 20 characters.
+    """
+    soup = BeautifulSoup(html, 'html.parser')
     links = set()
-    try:
-        soup = BeautifulSoup(html, 'html.parser')
-        for el in soup.find_all(class_=class_name):
-            a = el.find('a', href=True)
-            if a:
-                href = urljoin(base_url or '', a.get('href'))
-                links.add(href)
-    except:
-        pass
+
+    if not base_url:
+        return links
+
+    base_domain = urlparse(base_url).netloc.lower()
+    base_len = len(base_url.rstrip('/'))
+
+    for a in soup.find_all('a', href=True):
+        href = a['href']
+        if not href or '#' in href or 'javascript:' in href:
+            continue
+
+        full_url = urljoin(base_url, href)
+        link_domain = urlparse(full_url).netloc.lower()
+
+        # 1️⃣ Only same-domain links
+        if link_domain != base_domain:
+            continue
+
+        # 3️⃣ Only keep URLs at least 20 chars longer than the base
+        if len(full_url) < base_len + 20:
+            continue
+
+        links.add(full_url)
+
     return links
 
 # Extract external links from article content
@@ -119,7 +142,7 @@ def get_external_links_from_html(html, useless_domains, base_url=None):
     return links
 
 # For email finder: find candidate pages (contact/about/etc.) then scrape emails
-KEYWORDS = ['contact', 'about', 'privacy', 'policy', 'accessibility','disclaimer', 'author', 'terms', 'write', 'advertise','team','impressum','legal','conditions','cookies','support','help','faq','customer','service','press','media']
+KEYWORDS = ['contact', 'about', 'privacy', 'policy', 'accessibility','disclaimer', 'author', 'terms', 'write', 'advertise','team','impressum','legal','conditions','cookies','support','help','faq','customer','service','press','media','about-us','contact-us','get-in-touch','reach-us','who-we-are','our-story']
 
 def find_candidate_pages_for_emails(html, base_url=None):
     pages = set()
@@ -133,8 +156,49 @@ def find_candidate_pages_for_emails(html, base_url=None):
         pass
     return pages
 
+
+
 def extract_emails_from_html(html):
-    return set(m.group(0).lower() for m in EMAIL_RE.finditer(html or ''))
+    """
+    Extracts all valid emails from both text and <a href="mailto:..."> links.
+    Filters out junk, duplicates, and placeholder emails.
+    """
+    soup = BeautifulSoup(html or '', 'html.parser')
+    found = set()
+
+    # 1️⃣ Extract from plain text using regex
+    text = soup.get_text(separator=' ', strip=True)
+    found.update(
+        re.findall(
+            r'\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b',
+            text
+        )
+    )
+
+    # 2️⃣ Extract from <a href="mailto:...">
+    for a in soup.find_all('a', href=True):
+        href = a['href'].strip().lower()
+        if href.startswith('mailto:'):
+            email = href.split(':', 1)[1].split('?')[0]  # handle mailto:abc@abc.com?subject
+            found.add(email)
+
+    # 3️⃣ Clean invalid or placeholder emails
+    valid_emails = set()
+    for em in found:
+        if re.match(r'^[0-9a-f]{20,}@', em):  # random hash emails like sentry.io
+            continue
+        if re.search(r'@\S+\.(jpg|jpeg|png|gif|svg|webp)$', em):  # image-based placeholders
+            continue
+        if any(x in em for x in ['example.com', 'invalid', 'no-reply@', 'noreply@']):
+            continue
+        valid_emails.add(em)
+
+    return valid_emails
+
+
+
+
+
 
 # ---------- Concurrency wrappers ----------
 
@@ -165,8 +229,6 @@ if mode == 'Blog Research':
     col1, col2 = st.columns(2)
     with col1:
         base_url = st.text_input('Website URL (e.g. https://example.com)')
-        article_link_class = st.text_input('Enter the CSS class name of article')
-        # article_content_class = st.text_input('Class name that contains article content (outer tag)')
         page_mode = st.radio('Pages', ['Single Page', 'Multiple Pages'])
     with col2:
         admin_upload = st.file_uploader('Optional: Upload admin list (.txt or .csv)', type=['txt','csv'])
@@ -180,11 +242,9 @@ if mode == 'Blog Research':
     if run:
         if not base_url or not url_validator(base_url):
             st.error('Enter a valid URL')
-        elif not article_link_class:
-            st.error('Provide the article class name')
         else:
             t0 = time.time()
-            st.info('Fetching pages — this runs in memory and may take a while for many pages')
+            st.info('Fetching pages...')
 
             # prepare admin avoid list
             avoid_domains = set(USELESS_SITES)
@@ -209,7 +269,7 @@ if mode == 'Blog Research':
             # Extract article links
             article_links = set()
             for u, html in listing_html.items():
-                article_links.update(get_article_links_from_page(html, article_link_class, base_url=u))
+                article_links.update(get_article_links_from_page(html, base_url=u))
 
             st.write(f'Found {len(article_links)} article links — now fetching article pages to extract external links...')
 
@@ -274,7 +334,7 @@ elif mode == 'Email Finder':
                 end_i = min(len(text_urls), int(r_to))
                 text_urls = text_urls[start_i:end_i]
 
-            st.info(f'Processing {len(text_urls)} sites — results will be in-memory only')
+            st.info(f'Processing {len(text_urls)} sites...')
             t0 = time.time()
 
             # Step 1: fetch homepage of each site
@@ -310,14 +370,18 @@ elif mode == 'Email Finder':
                 emails_list = sorted(found_emails)[:int(max_emails_per_site)]
 
                 if emails_list:
-                    for i, em in enumerate(emails_list):
-                        # put site only on the first email row for readability
-                        rows.append({'site': site if i == 0 else '', 'email': em})
+                    for em in emails_list:
+                        # repeat site for every email
+                        rows.append({'site': site, 'email': em})
                 else:
                     rows.append({'site': site, 'email': ''})
 
             # make a DataFrame with one email per row
             df = pd.DataFrame(rows)
+
+            # Sort so sites with emails appear first
+            df['has_email'] = df['email'].apply(lambda x: bool(x.strip()))
+            df = df.sort_values(by='has_email', ascending=False).drop(columns=['has_email']).reset_index(drop=True)
 
             st.success(f"Done — scanned {len(set([r['site'] for r in rows]))} sites in {time.time()-t0:.1f}s")
 
