@@ -592,3 +592,7 @@ elif mode == 'Email Finder':
                     st.download_button('Download CSV', data=csv_bytes_without, file_name='emails_without.csv', mime='text/csv')
                 else:
                     st.info("All sites have at least one email.")
+
+# Footer / help
+st.markdown('---')
+
