@@ -1,10 +1,7 @@
-import io
 import re
 import time
 import random
-import smtplib
 import requests
-import dns.resolver
 import pandas as pd
 import streamlit as st
 
@@ -595,4 +592,5 @@ elif mode == 'Email Finder':
 
 # Footer / help
 st.markdown('---')
+
 
