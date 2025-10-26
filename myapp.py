@@ -342,8 +342,9 @@ def extract_emails(html_text: str) -> list:
         href = a['href'].strip()
         if href.lower().startswith('mailto:'):
             addr = href.split(':', 1)[1].split('?')[0]
-            addr = unquote(addr)               # decode %20, %40 etc
             addr = _clean_obfuscation(addr)
+            addr = unquote(addr)               # decode %20, %40 etc
+            addr = _sanitize_email_candidate(addr)
             addr = addr.strip().lower()
             if _is_sane_email(addr) and _verify_in_source(addr, raw_html, visible_text):
                 # 🧩 Skip if address appears inside a placeholder attribute
