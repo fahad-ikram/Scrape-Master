@@ -394,7 +394,7 @@ def extract_emails(html_text: str) -> list:
         if re.search(r'@\S+\.(jpg|jpeg|png|gif|svg|webp)$', em):
             continue
         lower = em.lower()
-        if any(x in lower for x in ['you','your','mysite.com','doe.com','png','jpg','jpeg','png','gif','svg','webp','example','domain.com' , 'invalid', 'no-reply@', 'noreply@', 'do-not-reply@','test.com']):
+        if any(x in lower for x in ['u003e','you','your','mysite.com','doe.com','png','jpg','jpeg','png','gif','svg','webp','example','domain.com' , 'invalid', 'no-reply@', 'noreply@', 'do-not-reply@','test.com']):
             continue
         cleaned.add(lower)
 
