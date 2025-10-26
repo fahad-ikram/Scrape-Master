@@ -1,7 +1,10 @@
 import re
+import html
 import time
 import random
+import smtplib
 import requests
+import dns.resolver
 import pandas as pd
 import streamlit as st
 
@@ -11,6 +14,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import unquote
 from urllib.parse import urlparse
 from urllib.parse import urljoin, urlparse
+from validate_email_address import validate_email
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ----------------------------
@@ -228,11 +232,7 @@ def find_candidate_pages_for_emails(html, base_url=None):
         pass
     return pages
 
-# Extract and clean emails from HTML
-import re
-import html
-from urllib.parse import unquote
-from bs4 import BeautifulSoup
+
 
 # ---------- Cloudflare data-cfemail decode ----------
 def _decode_cfemail(cfhex: str) -> str:
@@ -253,6 +253,10 @@ def _clean_obfuscation(s: str) -> str:
         return ''
     s = s.replace('\xa0', ' ')
     s = html.unescape(s)
+
+    # decode \uXXXX sequences like u003e -> >
+    s = re.sub(r'u([0-9a-fA-F]{4})', lambda m: chr(int(m.group(1), 16)), s)
+
     # common textual obfuscations (case-insensitive)
     s = re.sub(r'\s*\[\s*at\s*\]\s*', '@', s, flags=re.I)
     s = re.sub(r'\s*\(\s*at\s*\)\s*', '@', s, flags=re.I)
@@ -263,6 +267,7 @@ def _clean_obfuscation(s: str) -> str:
     # remove stray angle brackets/quotes/brackets/spaces leftover
     s = re.sub(r'[<>\s\(\)\[\]"\']+', '', s)
     return s.strip()
+
 
 # ---------- strict-ish final email regex ----------
 EMAIL_RE = re.compile(
@@ -300,6 +305,12 @@ def extract_emails(html_text: str) -> list:
     The function normalizes, filters placeholders/junk and returns sorted unique emails (lowercased).
     """
     soup = BeautifulSoup(html_text or '', 'html.parser')
+
+    # 🧩 NEW: Remove placeholder text from input and textarea elements
+    for inp in soup.find_all(['input', 'textarea']):
+        if inp.has_attr('placeholder'):
+            inp['placeholder'] = ''
+
     raw_html = html_text or ''
     visible_text = html.unescape(soup.get_text(separator=' ', strip=True)).replace('\xa0', ' ')
     found = set()
@@ -323,6 +334,9 @@ def extract_emails(html_text: str) -> list:
             addr = _clean_obfuscation(addr)
             addr = addr.strip().lower()
             if _is_sane_email(addr) and _verify_in_source(addr, raw_html, visible_text):
+                # 🧩 Skip if address appears inside a placeholder attribute
+                if re.search(r'placeholder\s*=\s*["\'].*' + re.escape(addr) + r'.*["\']', raw_html, flags=re.I):
+                    continue
                 found.add(addr)
 
     # 3) visible textual emails: scan visible_text for common patterns and deobfuscate nearby tokens
@@ -340,6 +354,9 @@ def extract_emails(html_text: str) -> list:
         # remove trailing punctuation often captured like comma/period
         c = re.sub(r'[,\.;:]+$', '', c)
         if _is_sane_email(c) and _verify_in_source(c, raw_html, visible_text):
+            # 🧩 Skip if appears inside placeholder
+            if re.search(r'placeholder\s*=\s*["\'].*' + re.escape(c) + r'.*["\']', raw_html, flags=re.I):
+                continue
             found.add(c)
 
     # 4) Fallback: scan entire raw HTML for common email-like tokens (clean & filter)
@@ -360,7 +377,7 @@ def extract_emails(html_text: str) -> list:
         if re.search(r'@\S+\.(jpg|jpeg|png|gif|svg|webp)$', em):
             continue
         lower = em.lower()
-        if any(x in lower for x in ['example.com', 'invalid', 'no-reply@', 'noreply@', 'do-not-reply@']):
+        if any(x in lower for x in ['you','your','mysite.com','doe.com','png','jpg','jpeg','png','gif','svg','webp','example','domain.com' , 'invalid', 'no-reply@', 'noreply@', 'do-not-reply@','test.com']):
             continue
         cleaned.add(lower)
 
@@ -388,11 +405,86 @@ def parallel_fetch(urls, max_workers=12):
                 results[u] = ''
     return results
 
+
+
+# ---------- Email verification logic ----------
+def verify_email(email):
+    """
+    Enhanced email verification with classification:
+    Valid, Invalid, Catch-All, Risky
+    """
+    result = {
+        "Email": email,
+        "Status": "Invalid",  # Default
+        "Catch_All": False
+    }
+
+    # --- 1️⃣ Syntax check ---
+    try:
+        if not validate_email(email):
+            result["Status"] = "Invalid"
+            return result
+    except Exception:
+        result["Status"] = "Invalid"
+        return result
+
+    # --- 2️⃣ MX Record Check ---
+    try:
+        domain = email.split('@')[-1]
+        if not domain:
+            result["Status"] = "Invalid"
+            return result
+        resolver = dns.resolver.Resolver()
+        resolver.nameservers = ["1.1.1.1", "8.8.8.8"]  # reliable DNS
+        mx_records = sorted([(r.preference, str(r.exchange).rstrip('.')) 
+                             for r in resolver.resolve(domain, 'MX')])
+        mx_host = mx_records[0][1]
+    except Exception:
+        result["Status"] = "Invalid"
+        return result
+
+    # --- 3️⃣ SMTP Check ---
+    try:
+        with smtplib.SMTP(mx_host, timeout=8) as server:
+            server.helo("example.com")
+            server.mail("check@example.com")
+
+            # Check actual email
+            code, response = server.rcpt(email)
+            response_text = response.decode() if isinstance(response, bytes) else str(response)
+
+            # Catch-All Test with random email
+            random_user = f"nonexistent_{random.randint(100000,999999)}@{domain}"
+            server.mail("check@example.com")
+            fake_code, _ = server.rcpt(random_user)
+            catch_all = 200 <= fake_code < 300
+            result["Catch_All"] = catch_all
+
+            # --- 4️⃣ Classification Logic ---
+            if 200 <= code < 300 and not catch_all:
+                result["Status"] = "Valid"
+            elif catch_all:
+                result["Status"] = "Catch-All"
+            elif code in (450, 451, 452) or "greylist" in response_text.lower():
+                result["Status"] = "Risky"
+            else:
+                # If SMTP rejects, mark risky instead of invalid (many servers hide real status)
+                result["Status"] = "Risky"
+
+    except Exception:
+        # Any timeout or connection error → Risky
+        result["Status"] = "Risky"
+
+    return result
+
+
+
+
 # ---------- Streamlit UI ----------
 st.title('💻⚡ ScrapeMaster — Focus is the best time-saver. ⏱️')
 
 
-mode = st.sidebar.selectbox('Choose Function', ['Blog Research', 'Email Finder'])
+mode = st.sidebar.selectbox('Choose Function', ['Blog Research', 'Email Finder', 'Verify Emails'])
 
 
 if mode == 'Blog Research':
@@ -590,7 +682,119 @@ elif mode == 'Email Finder':
                 else:
                     st.info("All sites have at least one email.")
 
+
+elif mode == 'Verify Emails':
+    
+    st.title('')
+
+    # ---------------- Sidebar ----------------
+    threads = st.sidebar.slider("Max Parallel Threads", min_value=2, max_value=20, value=5, step=1)
+
+    emails = []
+
+    # ---------------- Input Section ----------------
+    input_text = st.text_area("Enter email addresses (one per line):")
+
+    if input_text:
+        emails = [e.strip() for e in input_text.splitlines() if e.strip()]
+    else:
+        uploaded_file = st.file_uploader("Upload a CSV file with 'email' column", type=["csv",'xls','xlsx'])
+
+        if uploaded_file:
+        # Determine file type and read accordingly
+            if uploaded_file.name.endswith(".csv"):
+                df = pd.read_csv(uploaded_file)
+            else:  # .xls or .xlsx
+                df = pd.read_excel(uploaded_file)
+            email_col = st.selectbox("Select the email column:", df.columns)
+            emails = df[email_col].dropna().astype(str).tolist()
+
+    # ---------------- Verification ----------------
+    if st.button("🚀 Verify Emails"):
+        if not emails:
+            st.warning("Please enter or upload some emails first.")
+        else:
+            total = len(emails)
+            results = []
+
+            # Placeholder for info message
+            info_placeholder = st.empty()
+            # Progress bar
+            progress_bar = st.progress(0)
+
+            info_placeholder.info(f"Verifying 0/{total} emails... ⏳")
+
+            # --- Parallel Execution ---
+            with ThreadPoolExecutor(max_workers=threads) as executor:
+                futures = {executor.submit(verify_email, e): e for e in emails}
+                completed = 0
+                for future in as_completed(futures):
+                    results.append(future.result())
+                    completed += 1
+                    # Update progress
+                    progress_bar.progress(completed / total)
+                    info_placeholder.info(f"Verifying {completed}/{total} emails... ⏳")
+
+            # Clear the info message after completion
+            info_placeholder.empty()
+            progress_bar.empty()
+
+            # After collecting results in a list
+            df_results = pd.DataFrame(results)
+
+            # Remove duplicate emails
+            df_results = df_results.drop_duplicates(subset="Email").reset_index(drop=True)
+
+            # --- Split by Status ---
+            valid_df = df_results[(df_results["Status"] == "Valid") | (df_results["Status"] == "Catch-All")]
+            invalid_df = df_results[df_results["Status"] == "Invalid"]
+            risky_df = df_results[df_results["Status"] == "Risky"]
+
+            st.success("✅ Verification Completed")
+
+            # --- Tabs ---
+            tab1, tab2, tab3 = st.tabs([
+                f"✅ Valid ({len(valid_df)})",
+                f"❌ Invalid ({len(invalid_df)})",
+                f"❓ Risky ({len(risky_df)})"
+            ])
+
+            # --- Helper: Download Buttons ---
+            def download_emails(df, label):
+                if not df.empty:
+                    csv = StringIO()
+                    df.to_csv(csv, index=False)
+                    st.download_button(
+                        f"⬇️ Download {label}",
+                        csv.getvalue(),
+                        file_name=f"{label.lower().replace(' ','_')}.csv",
+                        mime="text/csv"
+                    )
+
+            # --- Display Tabs ---
+            with tab1:
+                st.subheader(f"✅ Valid Emails — {len(valid_df)} found")
+                if not valid_df.empty:
+                    st.dataframe(valid_df[["Email"]].reset_index(drop=True))  # Only Email column
+                    download_emails(valid_df[["Email"]], "Valid Emails")      # Download only emails
+                else:
+                    st.info("No valid emails found.")
+
+            with tab2:
+                st.subheader(f"❌ Invalid Emails — {len(invalid_df)} found")
+                if not invalid_df.empty:
+                    st.dataframe(invalid_df[["Email"]].reset_index(drop=True))
+                    download_emails(invalid_df[["Email"]], "Invalid Emails")
+                else:
+                    st.info("No invalid emails found.")
+
+            with tab3:
+                st.subheader(f"❓ Risky Emails — {len(risky_df)} found")
+                if not risky_df.empty:
+                    st.dataframe(risky_df[["Email"]].reset_index(drop=True))
+                    download_emails(risky_df[["Email"]], "Risky Emails")
+                else:
+                    st.info("No risky emails found.")
+
 # Footer / help
 st.markdown('---')
-
-
