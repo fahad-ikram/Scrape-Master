@@ -294,6 +294,18 @@ def _verify_in_source(candidate, raw_html, visible_text):
     cand = html.unescape(candidate or '').replace('\xa0', ' ')
     return (cand.lower() in raw_html.lower()) or (cand.lower() in visible_text.lower())
 
+def _sanitize_email_candidate(e: str) -> str:
+    """
+    Remove leading/trailing junk (like '>', '<', ':', whitespace, or u003e)
+    before final validation.
+    """
+    if not e:
+        return ''
+    # decode Unicode escapes like u003e → >
+    e = re.sub(r'u0*([0-9a-fA-F]{2,4})', lambda m: chr(int(m.group(1),16)), e)
+    # remove leading/trailing junk characters
+    e = e.strip(' \t\n\r<>:;"\'\u200b')
+    return e
 
 def extract_emails(html_text: str) -> list:
     """
@@ -349,8 +361,12 @@ def extract_emails(html_text: str) -> list:
     textual_candidates += re.findall(r'([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,24})', visible_text)
 
     for cand in textual_candidates:
+        # c = _clean_obfuscation(cand)
+        # c = unquote(c).strip().lower()
         c = _clean_obfuscation(cand)
-        c = unquote(c).strip().lower()
+        c = unquote(c)
+        c = _sanitize_email_candidate(c).lower()
+
         # remove trailing punctuation often captured like comma/period
         c = re.sub(r'[,\.;:]+$', '', c)
         if _is_sane_email(c) and _verify_in_source(c, raw_html, visible_text):
