@@ -344,6 +344,8 @@ def extract_emails(html_text: str) -> list:
             if e:
                 e = e.strip().lower()
                 if _is_sane_email(e) and validate_email(e) and VALID_EMAIL.match(e):
+                    if '@' not in e:
+                        continue
                     found.add(e)
 
     # 2) mailto: links (may be obfuscated inside href)
@@ -359,7 +361,9 @@ def extract_emails(html_text: str) -> list:
                 # 🧩 Skip if address appears inside a placeholder attribute
                 if re.search(r'placeholder\s*=\s*["\'].*' + re.escape(addr) + r'.*["\']', raw_html, flags=re.I):
                     continue
-                if validate_email(addr) and VALID_EMAIL.match(addr):
+                if '@' not in addr:
+                    continue
+                if '@' in addr and validate_email(addr) and VALID_EMAIL.match(addr):
                     found.add(addr)
 
     # 3) visible textual emails: scan visible_text for common patterns and deobfuscate nearby tokens
@@ -380,6 +384,8 @@ def extract_emails(html_text: str) -> list:
 
         # remove trailing punctuation often captured like comma/period
         c = re.sub(r'[,\.;:]+$', '', c)
+        if '@' not in c:
+            continue
         if _is_sane_email(c) and _verify_in_source(c, raw_html, visible_text):
             # 🧩 Skip if appears inside placeholder
             if re.search(r'placeholder\s*=\s*["\'].*' + re.escape(c) + r'.*["\']', raw_html, flags=re.I):
@@ -391,6 +397,8 @@ def extract_emails(html_text: str) -> list:
     for rc in raw_candidates:
         em = unquote(rc).strip().lower()
         em = re.sub(r'[<>\'"]', '', em)
+        if '@' not in em:
+            continue
         if _is_sane_email(em) and _verify_in_source(em, raw_html, visible_text):
             found.add(em)
 
