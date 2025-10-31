@@ -406,7 +406,7 @@ def extract_emails(html_text: str) -> list:
         if '@' not in lower:
             continue
         
-        if any(x in lower for x in ['subject=','img','u003e','you','your','mysite.com','doe.com','png','jpg','jpeg','png','gif','svg','webp','example','domain.com' , 'invalid', 'no-reply@', 'noreply@', 'do-not-reply@','test.com']):
+        if any(x in lower for x in ['img','u003e','you','your','mysite.com','doe.com','png','jpg','jpeg','png','gif','svg','webp','example','domain.com' , 'invalid', 'no-reply@', 'noreply@', 'do-not-reply@','test.com']):
             continue
 
         if re.search(r'@\S+\.(jpg|jpeg|png|gif|svg|webp)$', em):
@@ -416,15 +416,14 @@ def extract_emails(html_text: str) -> list:
             continue
 
         email = clean_email(lower)
-        if not email:
-            continue
+        if email:
+            
+            if not VALID_EMAIL.match(email):
+                continue
 
-        if not VALID_EMAIL.match(email):
-            continue
+            if not validate_email(email):
+                continue
 
-        if not validate_email(email):
-            continue
-        
         cleaned.add(email)
 
     return sorted(cleaned)
