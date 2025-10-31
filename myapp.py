@@ -405,8 +405,10 @@ def extract_emails(html_text: str) -> list:
         if any(x in lower for x in ['img','u003e','you','your','mysite.com','doe.com','png','jpg','jpeg','png','gif','svg','webp','example','domain.com' , 'invalid', 'no-reply@', 'noreply@', 'do-not-reply@','test.com']):
             continue
         email = clean_email(lower)
-        if email and EMAIL_RE.match(email):
-            cleaned.add(email)
+        VALID_EMAIL = re.compile(r"^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,24}$")
+        if email:
+            if VALID_EMAIL.match(email):
+                cleaned.add(email)
     return sorted(cleaned)
 
 
