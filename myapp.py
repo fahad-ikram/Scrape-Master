@@ -399,16 +399,33 @@ def extract_emails(html_text: str) -> list:
     for em in found:
         if not em:
             continue
-        if re.match(r'^[0-9a-f]{20,}@', em):  # long hex hashes
-            continue
-        if re.search(r'@\S+\.(jpg|jpeg|png|gif|svg|webp)$', em):
-            continue
+
         lower = em.lower()
+        
+        # It must contain @ — if not, skip
+        if '@' not in lower:
+            continue
+        
         if any(x in lower for x in ['subject=','img','u003e','you','your','mysite.com','doe.com','png','jpg','jpeg','png','gif','svg','webp','example','domain.com' , 'invalid', 'no-reply@', 'noreply@', 'do-not-reply@','test.com']):
             continue
+
+        if re.search(r'@\S+\.(jpg|jpeg|png|gif|svg|webp)$', em):
+            continue
+        
+        if re.match(r'^[0-9a-f]{20,}@', em):  # long hex hashes
+            continue
+
         email = clean_email(lower)
-        if email and VALID_EMAIL.match(email) and validate_email(email):
-            cleaned.add(email)
+        if not email:
+            continue
+
+        if not VALID_EMAIL.match(email):
+            continue
+
+        if not validate_email(email):
+            continue
+        
+        cleaned.add(email)
 
     return sorted(cleaned)
 
