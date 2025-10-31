@@ -420,7 +420,8 @@ def extract_emails(html_text: str) -> list:
             'png','jpg','jpeg','gif','svg','webp',
             'example','domain.com','invalid',
             'no-reply@','noreply@','do-not-reply@','test.com',
-            'subject=','body=','/?','http://','https://','%'
+            'subject=','body=','/?','http://','https://','%','@xxx.xx',
+            '.gov','.edu'
         ]):
             continue
 
@@ -677,21 +678,10 @@ elif mode == 'Email Finder':
                 if extract_from_candidates:
                     candidate_pages = find_candidate_pages_for_emails(i, base_url=site)
                     candidate_pages = list(candidate_pages)
-                    candidates_html = parallel_fetch(candidate_pages, max_workers=len(candidate_pages))
+                    candidates_html = parallel_fetch(candidate_pages, max_workers=concurrency)
                     for ch in candidates_html.values():
                         found_emails.update(extract_emails(ch))
 
-                # fallback: look for mailto links if nothing found
-                # if len(found_emails) < 1:
-                #     mailtos = set()
-                #     try:
-                #         soup = BeautifulSoup(i, 'html.parser')
-                #         for a in soup.find_all('a', href=True):
-                #             if a['href'].lower().startswith('mailto:'):
-                #                 mailtos.add(a['href'].split(':',1)[1])
-                #     except:
-                #         pass
-                #     found_emails.update(mailtos)
 
                 # limit number of emails per site
                 emails_list = sorted(found_emails)[:int(max_emails_per_site)]
