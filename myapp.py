@@ -405,7 +405,7 @@ def extract_emails(html_text: str) -> list:
         if any(x in lower for x in ['img','u003e','you','your','mysite.com','doe.com','png','jpg','jpeg','png','gif','svg','webp','example','domain.com' , 'invalid', 'no-reply@', 'noreply@', 'do-not-reply@','test.com']):
             continue
         email = clean_email(lower)
-        if email:                  # only add real emails
+        if email and EMAIL_RE.match(email):
             cleaned.add(email)
     return sorted(cleaned)
 
