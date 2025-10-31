@@ -312,7 +312,7 @@ def clean_email(text):
     cleaned = re.split(r"\.{2,}", text)[-1]
     # extract valid email from remaining text
     match = re.search(r"[A-Za-z0-9!#$%&'*+/=?^_`{|}~\.-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}", cleaned)
-    return match.group(0) if match else None
+    return match.group(0) if match else False
 
 
 # ---------- Main email extraction function ----------
