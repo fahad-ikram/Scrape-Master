@@ -421,7 +421,7 @@ def extract_emails(html_text: str) -> list:
             'example','domain.com','invalid',
             'no-reply@','noreply@','do-not-reply@','test.com',
             'subject=','body=','/?','http://','https://','%','@xxx.xx',
-            '.gov','.edu'
+            '.gov','.edu','email.com','address.com','myemail'
         ]):
             continue
 
@@ -429,7 +429,7 @@ def extract_emails(html_text: str) -> list:
         if re.search(r'@\S+\.(jpg|jpeg|png|gif|svg|webp)$', lower):
             continue
 
-        if re.match(r'^[0-9a-f]{20,}@', lower):
+        if re.search(r'^[0-9a-f]{20,}@', lower):
             continue
 
         email = clean_email(lower)
