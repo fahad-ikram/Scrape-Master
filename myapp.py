@@ -406,9 +406,9 @@ def extract_emails(html_text: str) -> list:
             continue
         email = clean_email(lower)
         VALID_EMAIL = re.compile(r"^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,24}$")
-        if email:
-            if VALID_EMAIL.match(email):
-                cleaned.add(email)
+        if email and VALID_EMAIL.match(email):
+            cleaned.add(email)
+            
     return sorted(cleaned)
 
 
