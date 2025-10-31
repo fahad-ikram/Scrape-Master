@@ -358,7 +358,8 @@ def extract_emails(html_text: str) -> list:
                 # 🧩 Skip if address appears inside a placeholder attribute
                 if re.search(r'placeholder\s*=\s*["\'].*' + re.escape(addr) + r'.*["\']', raw_html, flags=re.I):
                     continue
-                found.add(addr)
+                if validate_email(addr):
+                    found.add(addr)
 
     # 3) visible textual emails: scan visible_text for common patterns and deobfuscate nearby tokens
     # This regex catches a wide variety; results are then cleaned and validated.
@@ -408,7 +409,7 @@ def extract_emails(html_text: str) -> list:
         VALID_EMAIL = re.compile(r"^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,24}$")
         if email and VALID_EMAIL.match(email):
             cleaned.add(email)
-            
+
     return sorted(cleaned)
 
 
