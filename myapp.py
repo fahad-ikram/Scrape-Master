@@ -30,8 +30,6 @@ USELESS_SITES = set([
     'x.com','bsky.app','threads.com','#','img'
 ])
 
-EMAIL_RE = re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
-
 # Simple URL validator
 def url_validator(url):
     try:
@@ -270,9 +268,7 @@ def _clean_obfuscation(s: str) -> str:
 
 
 # ---------- strict-ish final email regex ----------
-EMAIL_RE = re.compile(
-    r'^[A-Za-z0-9!#$%&\'*+/=?^_`{|}~\.-]{1,64}@[A-Za-z0-9\.-]{1,253}\.[A-Za-z]{2,24}$'
-)
+EMAIL_RE = re.compile(r'^[A-Za-z0-9!#$%&\'*+/=?^_`{|}~\.-]{1,64}@[A-Za-z0-9\.-]{1,253}\.[A-Za-z]{2,24}$')
 
 def _is_sane_email(e: str) -> bool:
     try:
@@ -303,10 +299,22 @@ def _sanitize_email_candidate(e: str) -> str:
         return ''
     # decode Unicode escapes like u003e → >
     e = re.sub(r'u0*([0-9a-fA-F]{2,4})', lambda m: chr(int(m.group(1),16)), e)
+    # remove prefixes like //, /?, mailto:, http://, https://
+    e = re.sub(r'^(?:mailto:|https?:\/\/|\/\/|\/\?)', '', e, flags=re.I)
     # remove leading/trailing junk characters
     e = e.strip(' \t\n\r<>:;"\'\u200b')
     return e
 
+
+def clean_email(text):
+    # remove everything before consecutive dots
+    cleaned = re.split(r"\.{2,}", text)[-1]
+    # extract valid email from remaining text
+    match = re.search(r"[A-Za-z0-9!#$%&'*+/=?^_`{|}~\.-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}", cleaned)
+    return match.group(0) if match else None
+
+
+# ---------- Main email extraction function ----------
 def extract_emails(html_text: str) -> list:
     """
     Extract and return a sorted list of VERIFIED email addresses found in html_text.
@@ -394,10 +402,11 @@ def extract_emails(html_text: str) -> list:
         if re.search(r'@\S+\.(jpg|jpeg|png|gif|svg|webp)$', em):
             continue
         lower = em.lower()
-        if any(x in lower for x in ['u003e','you','your','mysite.com','doe.com','png','jpg','jpeg','png','gif','svg','webp','example','domain.com' , 'invalid', 'no-reply@', 'noreply@', 'do-not-reply@','test.com']):
+        if any(x in lower for x in ['img','u003e','you','your','mysite.com','doe.com','png','jpg','jpeg','png','gif','svg','webp','example','domain.com' , 'invalid', 'no-reply@', 'noreply@', 'do-not-reply@','test.com']):
             continue
-        cleaned.add(lower)
-
+        email = clean_email(lower)
+        if email:                  # only add real emails
+            cleaned.add(email)
     return sorted(cleaned)
 
 
@@ -410,7 +419,7 @@ def get_base_url(full_url):
 
 # ---------- Concurrency wrappers ----------
 
-def parallel_fetch(urls, max_workers=12):
+def parallel_fetch(urls, max_workers):
     results = {}
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         futures = { ex.submit(fetch_url, u): u for u in urls }
@@ -580,7 +589,7 @@ if mode == 'Blog Research':
 elif mode == 'Email Finder':
     st.header('')
     # Common controls
-    concurrency = st.sidebar.slider('Max concurrent threads', min_value=5, max_value=100, value=20, step=5)
+    concurrency = st.sidebar.slider('Max concurrent threads', min_value=10, max_value=200, value=20, step=5)
     col1, col2 = st.columns(2)
     with col1:
         urls_upload = st.file_uploader('Upload .txt or .csv with URLs (one per line) or paste below', type=['txt','csv'])
@@ -636,7 +645,7 @@ elif mode == 'Email Finder':
                 if extract_from_candidates:
                     candidate_pages = find_candidate_pages_for_emails(i, base_url=site)
                     candidate_pages = list(candidate_pages)
-                    candidates_html = parallel_fetch(candidate_pages, max_workers=min(8, concurrency))
+                    candidates_html = parallel_fetch(candidate_pages, max_workers=len(candidate_pages))
                     for ch in candidates_html.values():
                         found_emails.update(extract_emails(ch))
 
