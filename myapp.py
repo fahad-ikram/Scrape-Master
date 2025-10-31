@@ -396,33 +396,75 @@ def extract_emails(html_text: str) -> list:
 
     # 5) Final filtering to drop placeholders, hashes, image junk, or common no-reply addresses
     cleaned = set()
+    # for em in found:
+    #     if not em:
+    #         continue
+
+    #     lower = em.lower()
+        
+    #     # It must contain @ — if not, skip
+    #     if '@' not in lower:
+    #         continue
+        
+    #     if any(x in lower for x in ['img','u003e','you','your','mysite.com','doe.com','png','jpg','jpeg','png','gif','svg','webp','example','domain.com' , 'invalid', 'no-reply@', 'noreply@', 'do-not-reply@','test.com']):
+    #         continue
+
+    #     if re.search(r'@\S+\.(jpg|jpeg|png|gif|svg|webp)$', em):
+    #         continue
+        
+    #     if re.match(r'^[0-9a-f]{20,}@', em):  # long hex hashes
+    #         continue
+
+    #     email = clean_email(lower)
+    #     if email:
+
+    #         if not VALID_EMAIL.match(email):
+    #             continue
+
+    #         if not validate_email(email):
+    #             continue
+
+    #     cleaned.add(email)
     for em in found:
         if not em:
             continue
 
         lower = em.lower()
-        
-        # It must contain @ — if not, skip
+
+        # Must contain @
         if '@' not in lower:
             continue
-        
-        if any(x in lower for x in ['img','u003e','you','your','mysite.com','doe.com','png','jpg','jpeg','png','gif','svg','webp','example','domain.com' , 'invalid', 'no-reply@', 'noreply@', 'do-not-reply@','test.com']):
+
+        # Skip common garbage words or placeholders
+        if any(x in lower for x in [
+            'img','u003e','you','your','mysite.com','doe.com',
+            'png','jpg','jpeg','gif','svg','webp',
+            'example','domain.com','invalid',
+            'no-reply@','noreply@','do-not-reply@','test.com',
+            'subject=','body=','/?','http://','https://'
+        ]):
             continue
 
-        if re.search(r'@\S+\.(jpg|jpeg|png|gif|svg|webp)$', em):
-            continue
-        
-        if re.match(r'^[0-9a-f]{20,}@', em):  # long hex hashes
+        # Skip image-ending fake emails
+        if re.search(r'@\S+\.(jpg|jpeg|png|gif|svg|webp)$', lower):
             continue
 
+        # Skip hashed garbage like ab001cde23@...
+        if re.match(r'^[0-9a-f]{20,}@', lower):
+            continue
+
+        # Extract real email from weird text like ".....email"
         email = clean_email(lower)
-        if email:
-            
-            if not VALID_EMAIL.match(email):
-                continue
+        if not email:
+            continue
 
-            if not validate_email(email):
-                continue
+        # Must match valid pattern
+        if not VALID_EMAIL.match(email):
+            continue
+
+        # Must pass your custom email check
+        if not validate_email(email):
+            continue
 
         cleaned.add(email)
 
