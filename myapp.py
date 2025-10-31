@@ -269,6 +269,7 @@ def _clean_obfuscation(s: str) -> str:
 
 # ---------- strict-ish final email regex ----------
 EMAIL_RE = re.compile(r'^[A-Za-z0-9!#$%&\'*+/=?^_`{|}~\.-]{1,64}@[A-Za-z0-9\.-]{1,253}\.[A-Za-z]{2,24}$')
+VALID_EMAIL = re.compile(r"^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,24}$")
 
 def _is_sane_email(e: str) -> bool:
     try:
@@ -342,7 +343,7 @@ def extract_emails(html_text: str) -> list:
             e = _decode_cfemail(cf)
             if e:
                 e = e.strip().lower()
-                if _is_sane_email(e):
+                if _is_sane_email(e) and validate_email(e) and VALID_EMAIL.match(e):
                     found.add(e)
 
     # 2) mailto: links (may be obfuscated inside href)
@@ -358,7 +359,7 @@ def extract_emails(html_text: str) -> list:
                 # 🧩 Skip if address appears inside a placeholder attribute
                 if re.search(r'placeholder\s*=\s*["\'].*' + re.escape(addr) + r'.*["\']', raw_html, flags=re.I):
                     continue
-                if validate_email(addr):
+                if validate_email(addr) and VALID_EMAIL.match(addr):
                     found.add(addr)
 
     # 3) visible textual emails: scan visible_text for common patterns and deobfuscate nearby tokens
@@ -406,8 +407,7 @@ def extract_emails(html_text: str) -> list:
         if any(x in lower for x in ['img','u003e','you','your','mysite.com','doe.com','png','jpg','jpeg','png','gif','svg','webp','example','domain.com' , 'invalid', 'no-reply@', 'noreply@', 'do-not-reply@','test.com']):
             continue
         email = clean_email(lower)
-        VALID_EMAIL = re.compile(r"^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,24}$")
-        if email and VALID_EMAIL.match(email):
+        if email and VALID_EMAIL.match(email) and validate_email(email):
             cleaned.add(email)
 
     return sorted(cleaned)
