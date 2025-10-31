@@ -682,16 +682,16 @@ elif mode == 'Email Finder':
                         found_emails.update(extract_emails(ch))
 
                 # fallback: look for mailto links if nothing found
-                if len(found_emails) < 1:
-                    mailtos = set()
-                    try:
-                        soup = BeautifulSoup(i, 'html.parser')
-                        for a in soup.find_all('a', href=True):
-                            if a['href'].lower().startswith('mailto:'):
-                                mailtos.add(a['href'].split(':',1)[1])
-                    except:
-                        pass
-                    found_emails.update(mailtos)
+                # if len(found_emails) < 1:
+                #     mailtos = set()
+                #     try:
+                #         soup = BeautifulSoup(i, 'html.parser')
+                #         for a in soup.find_all('a', href=True):
+                #             if a['href'].lower().startswith('mailto:'):
+                #                 mailtos.add(a['href'].split(':',1)[1])
+                #     except:
+                #         pass
+                #     found_emails.update(mailtos)
 
                 # limit number of emails per site
                 emails_list = sorted(found_emails)[:int(max_emails_per_site)]
