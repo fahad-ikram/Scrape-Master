@@ -620,29 +620,29 @@ if mode == 'Blog Research':
             # st.download_button('Download CSV', data=csv_bytes, file_name='clients.csv', mime='text/csv')
             article_html = parallel_fetch(article_links or [], max_workers=concurrency)
 
-            rows = []  # collect dicts like {'source_article': article_url, 'client_url': external_domain}
+            rows = []
             for u, html in article_html.items():
                 links = get_external_links_from_html(html, avoid_domains, base_url=u)
                 for link in links:
                     rows.append({'source_article': u, 'client_url': link})
 
-            # Convert to DataFrame (unique pairs article -> external client)
             if rows:
                 df = pd.DataFrame(rows)
+                # drop duplicates based only on client_url
                 df = df.drop_duplicates(subset=['client_url']).reset_index(drop=True)
-                df = df.sort_values(by=['client_url', 'source_article']).reset_index(drop=True)
+                df = df.sort_values(by=['client_url']).reset_index(drop=True)
             else:
                 df = pd.DataFrame(columns=['source_article', 'client_url'])
 
-            # Simulate all/new behaviour
             if all_or_new == 'New Data':
-                df = df.drop_duplicates()
+                df = df.drop_duplicates(subset=['client_url'])
 
-            st.success(f'Done — extracted {len(df)} external links (with source) in {time.time()-t0:.1f}s')
+            st.success(f'Done — extracted {len(df)} unique external client URLs in {time.time()-t0:.1f}s')
             st.dataframe(df)
 
             csv_bytes = df.to_csv(index=False).encode('utf-8')
             st.download_button('Download CSV', data=csv_bytes, file_name='clients.csv', mime='text/csv')
+
 
 elif mode == 'Email Finder':
     st.header('')
