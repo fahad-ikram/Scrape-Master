@@ -630,7 +630,7 @@ if mode == 'Blog Research':
                 df = pd.DataFrame(rows)
                 # drop duplicates
                 df = df = df.drop_duplicates().reset_index(drop=True)
-                df = df.sort_values(by=['client_url']).reset_index(drop=True)
+                # df = df.sort_values(by=['client_url']).reset_index(drop=True)
             else:
                 df = pd.DataFrame(columns=['source_article', 'client_url'])
 
