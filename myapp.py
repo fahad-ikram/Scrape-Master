@@ -628,14 +628,14 @@ if mode == 'Blog Research':
 
             if rows:
                 df = pd.DataFrame(rows)
-                # drop duplicates based only on client_url
-                df = df.drop_duplicates(subset=['client_url']).reset_index(drop=True)
+                # drop duplicates
+                df = df = df.drop_duplicates().reset_index(drop=True)
                 df = df.sort_values(by=['client_url']).reset_index(drop=True)
             else:
                 df = pd.DataFrame(columns=['source_article', 'client_url'])
 
             if all_or_new == 'New Data':
-                df = df.drop_duplicates(subset=['client_url'])
+                df = df.drop_duplicates()
 
             st.success(f'Done — extracted {len(df)} unique external client URLs in {time.time()-t0:.1f}s')
             st.dataframe(df)
