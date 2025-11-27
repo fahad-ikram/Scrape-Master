@@ -663,7 +663,12 @@ if mode == 'Blog Research':
             if all_or_new == 'New Data':
                 df = df.drop_duplicates()
 
-            st.success(f'Done — extracted {len(set(df['client_url']))} unique external client URLs in {time.time()-t0:.1f}s')
+            st.success(
+                f"Completed successfully — Extracted {len(set(df['client_url']))} Unique Clients"
+                f"Total articles processed: {len(df['source_article'])}."
+                f"Time Taken {time.time() - t0:.1f}s."
+            )
+
             st.dataframe(df)
 
             csv_bytes = df.to_csv(index=False).encode('utf-8')
