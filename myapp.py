@@ -537,6 +537,17 @@ def verify_email(email):
     return result
 
 
+def normalize_domain(url):
+    if not url:
+        return None
+    try:
+        parsed = urlparse(url)
+        domain = parsed.netloc or parsed.path   # handles urls like 'example.com'
+        domain = domain.replace("www.", "")     # remove www
+        return f"https://{domain}/"             # final uniform format
+    except:
+        return None
+
 
 
 # ---------- Streamlit UI ----------
@@ -558,7 +569,7 @@ if mode == 'Blog Research':
         admin_upload = st.file_uploader('Optional: Upload admin list (.txt or .csv)', type=['txt','csv'])
         all_or_new = st.radio('Add all data or just new entries', ['All Data', 'New Data'])
         if page_mode == 'Multiple Pages':
-            start_page = st.number_input('Start page (>=2)', min_value=2, value=2)
+            start_page = st.number_input('Start page', min_value=1, value=1)
             end_page = st.number_input('End page', min_value=2, value=5)
 
     run = st.button('Run Blog Research')
@@ -629,8 +640,8 @@ if mode == 'Blog Research':
             if rows:
                 df = pd.DataFrame(rows)
                 # drop duplicates
+                df['client_url'] = df['client_url'].apply(normalize_domain)
                 df = df = df.drop_duplicates().reset_index(drop=True)
-                # df = df.sort_values(by=['client_url']).reset_index(drop=True)
             else:
                 df = pd.DataFrame(columns=['source_article', 'client_url'])
 
