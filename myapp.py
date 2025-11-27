@@ -639,8 +639,8 @@ if mode == 'Blog Research':
 
             if rows:
                 df = pd.DataFrame(rows)
-                # drop duplicates
                 df['client_url'] = df['client_url'].apply(normalize_domain)
+                # drop duplicates
                 df = df = df.drop_duplicates().reset_index(drop=True)
             else:
                 df = pd.DataFrame(columns=['source_article', 'client_url'])
@@ -648,7 +648,7 @@ if mode == 'Blog Research':
             if all_or_new == 'New Data':
                 df = df.drop_duplicates()
 
-            st.success(f'Done — extracted {len(df)} unique external client URLs in {time.time()-t0:.1f}s')
+            st.success(f'Done — extracted {df['client_url'].nunique()} unique external client URLs in {time.time()-t0:.1f}s')
             st.dataframe(df)
 
             csv_bytes = df.to_csv(index=False).encode('utf-8')
