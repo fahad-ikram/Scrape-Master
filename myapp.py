@@ -664,10 +664,16 @@ if mode == 'Blog Research':
                 df = df.drop_duplicates()
 
             st.success(
-                f"Completed successfully — Extracted {len(set(df['client_url']))} Unique Clients\n"
-                f"Total articles processed: {len(df['source_article'])}.\n"
-                f"Time Taken {time.time() - t0:.1f}s."
+                "Completed successfully — Extracted {unique} unique clients.\n"
+                "Total articles processed: {articles}.\n"
+                "Time taken: {seconds:.1f}s."
+                .format(
+                    unique=len(set(df['client_url'])),
+                    articles=len(df['source_article']),
+                    seconds=time.time() - t0
+                )
             )
+
 
             st.dataframe(df)
 
