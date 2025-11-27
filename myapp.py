@@ -581,8 +581,9 @@ if mode == 'Blog Research':
             st.error('Enter a valid URL')
         else:
             t0 = time.time()
-            fetch_info = st.empty()
-            fetch_info.info('Fetching pages...')
+            fetch_msg = st.empty()
+            fetch_msg.info('Fetching pages...')
+
 
 
             # prepare admin avoid list
@@ -612,7 +613,7 @@ if mode == 'Blog Research':
                 article_links.update(get_article_links_from_page(html, base_url=u))
 
             st.write(f'{len(article_links)} Articles Found!')
-            fetch_info.empty()
+            fetch_msg.empty()
             # Fetch article pages and extract external links
             # article_html = parallel_fetch(article_links or [], max_workers=concurrency)
             # external_domains = set()
