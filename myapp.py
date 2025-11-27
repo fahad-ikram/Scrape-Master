@@ -601,19 +601,44 @@ if mode == 'Blog Research':
             st.write(f'Found {len(article_links)} article links — now fetching article pages to extract external links...')
 
             # Fetch article pages and extract external links
+            # article_html = parallel_fetch(article_links or [], max_workers=concurrency)
+            # external_domains = set()
+            # for u, html in article_html.items():
+            #     external_domains.update(get_external_links_from_html(html, avoid_domains, base_url=u))
+
+            # # Convert to dataframe (unique)
+            # df = pd.DataFrame(sorted(external_domains), columns=['client_url'])
+
+            # # Simulate all/new behaviour: if 'New Data' we simply remove duplicates in the shown dataframe (virtual)
+            # if all_or_new == 'New Data':
+            #     df = df.drop_duplicates()
+
+            # st.success(f'Done — extracted {len(df)} external client URLs in {time.time()-t0:.1f}s')
+            # st.dataframe(df)
+
+            # csv_bytes = df.to_csv(index=False).encode('utf-8')
+            # st.download_button('Download CSV', data=csv_bytes, file_name='clients.csv', mime='text/csv')
             article_html = parallel_fetch(article_links or [], max_workers=concurrency)
-            external_domains = set()
+
+            rows = []  # collect dicts like {'source_article': article_url, 'client_url': external_domain}
             for u, html in article_html.items():
-                external_domains.update(get_external_links_from_html(html, avoid_domains, base_url=u))
+                links = get_external_links_from_html(html, avoid_domains, base_url=u)
+                for link in links:
+                    rows.append({'source_article': u, 'client_url': link})
 
-            # Convert to dataframe (unique)
-            df = pd.DataFrame(sorted(external_domains), columns=['client_url'])
+            # Convert to DataFrame (unique pairs article -> external client)
+            if rows:
+                df = pd.DataFrame(rows)
+                df = df.drop_duplicates(subset=['client_url']).reset_index(drop=True)
+                df = df.sort_values(by=['client_url', 'source_article']).reset_index(drop=True)
+            else:
+                df = pd.DataFrame(columns=['source_article', 'client_url'])
 
-            # Simulate all/new behaviour: if 'New Data' we simply remove duplicates in the shown dataframe (virtual)
+            # Simulate all/new behaviour
             if all_or_new == 'New Data':
                 df = df.drop_duplicates()
 
-            st.success(f'Done — extracted {len(df)} external client URLs in {time.time()-t0:.1f}s')
+            st.success(f'Done — extracted {len(df)} external links (with source) in {time.time()-t0:.1f}s')
             st.dataframe(df)
 
             csv_bytes = df.to_csv(index=False).encode('utf-8')
