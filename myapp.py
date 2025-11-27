@@ -609,7 +609,7 @@ if mode == 'Blog Research':
             for u, html in listing_html.items():
                 article_links.update(get_article_links_from_page(html, base_url=u))
 
-            st.write(f'Found {len(article_links)} article links — now fetching article pages to extract external links...')
+            st.write(f'{len(article_links)} Articles Found!')
 
             # Fetch article pages and extract external links
             # article_html = parallel_fetch(article_links or [], max_workers=concurrency)
@@ -631,12 +631,24 @@ if mode == 'Blog Research':
             # st.download_button('Download CSV', data=csv_bytes, file_name='clients.csv', mime='text/csv')
             article_html = parallel_fetch(article_links or [], max_workers=concurrency)
 
+            # --- Progress bar ---
+            progress_text = st.empty()
+            progress_bar = st.progress(0)
+
+            total_articles = len(article_links)
+            processed = 0
+
             rows = []
             for u, html in article_html.items():
+                processed += 1
+                progress_bar.progress(processed / total_articles)
+                progress_text.info(f"Processing articles: {processed}/{total_articles}")
                 links = get_external_links_from_html(html, avoid_domains, base_url=u)
                 for link in links:
                     rows.append({'source_article': u, 'client_url': link})
-
+            # Clear progress UI
+            progress_bar.empty()
+            progress_text.empty()
             if rows:
                 df = pd.DataFrame(rows)
                 df['client_url'] = df['client_url'].apply(normalize_domain)
