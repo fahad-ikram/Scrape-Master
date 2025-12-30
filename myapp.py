@@ -161,6 +161,24 @@ def fetch_url(url, timeout=20):
     except Exception as e:
         return ''
 
+def is_valid_url(url):
+    """
+    Checks if the URL has a valid scheme and netloc.
+    """
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ('http', 'https'):
+            return False
+        if not parsed.netloc:
+            return False
+        # Optional: ensure no spaces or weird characters in netloc
+        if ' ' in parsed.netloc or '%' in parsed.netloc.split('//')[-1]:
+            return False
+        return True
+    except:
+        return False
+    
+    
 # Extract articles from the given HTML page
 def get_article_links_from_page(html, classtaken=None):
     links = set()
@@ -174,36 +192,41 @@ def get_article_links_from_page(html, classtaken=None):
 # Extract external links from article content
 def get_external_links_from_html(html, useless_domains, base_domain=None):
     links = set()
-
     try:
         soup = BeautifulSoup(html, 'html.parser')
+        base_domain_netloc = ''
+        if base_domain:
+            parsed_base = urlparse(base_domain)
+            base_domain_netloc = parsed_base.netloc.lower().replace('www.', '')
 
         for a in soup.find_all('a', href=True):
             href = a.get('href')
             if not href:
                 continue
 
-            # build full URL
             full = urljoin(base_domain if base_domain else '', href)
-            if not urlparse(full).netloc:
-                continue
             parsed = urlparse(full)
-
-            domain = parsed.netloc.lower()
+            domain = parsed.netloc.lower().replace('www.', '')
             if not domain:
                 continue
 
-            # same logic: skip useless domains (substring match)
+            # Skip internal links
+            if domain == base_domain_netloc:
+                continue
+
+            # Skip useless domains
             if any(u in domain for u in useless_domains):
                 continue
 
-            # normalize
+            # Skip malformed URLs
+            if not is_valid_url(full):
+                continue
+
             scheme = parsed.scheme or 'http'
-            links.add(f"{scheme}://{parsed.netloc}/")
+            links.add(f"{scheme}://{domain}/")
 
     except:
         pass
-
     return links
 
 # For email finder: find candidate pages (contact/about/etc.) then scrape emails
