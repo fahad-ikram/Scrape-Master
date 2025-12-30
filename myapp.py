@@ -160,12 +160,47 @@ def fetch_url(url, timeout=20):
         return ''
 
 # Extract article links by class name
+# def get_article_links_from_page(html, base_url=None):
+#     """
+#     Automatically find internal article links without CSS class or pattern.
+#     - Keeps only same-domain links.
+#     - Skips contact/about/etc. pages.
+#     - Keeps only links longer than base_url + 20 characters.
+#     """
+#     soup = BeautifulSoup(html, 'html.parser')
+#     links = set()
+
+#     if not base_url:
+#         return links
+
+#     base_domain = urlparse(base_url).netloc.lower()
+#     base_len = len(base_url.rstrip('/'))
+
+#     for a in soup.find_all('a', href=True):
+#         href = a['href']
+#         if not href or '#' in href or 'javascript:' in href:
+#             continue
+
+#         full_url = urljoin(base_url, href)
+#         link_domain = urlparse(full_url).netloc.lower()
+
+#         # 1️⃣ Only same-domain links
+#         if link_domain != base_domain:
+#             continue
+
+#         # 3️⃣ Only keep URLs at least 20 chars longer than the base
+#         if len(full_url) < base_len + 20:
+#             continue
+
+#         links.add(full_url)
+
+#     return links
 def get_article_links_from_page(html, base_url=None):
     """
-    Automatically find internal article links without CSS class or pattern.
-    - Keeps only same-domain links.
-    - Skips contact/about/etc. pages.
-    - Keeps only links longer than base_url + 20 characters.
+    Automatically find internal article links.
+    - Keeps only same-domain links
+    - Skips anchors / javascript
+    - Keeps only links at least base_url + 20 characters (base cleaned from /page/X)
     """
     soup = BeautifulSoup(html, 'html.parser')
     links = set()
@@ -173,22 +208,28 @@ def get_article_links_from_page(html, base_url=None):
     if not base_url:
         return links
 
-    base_domain = urlparse(base_url).netloc.lower()
-    base_len = len(base_url.rstrip('/'))
+    parsed = urlparse(base_url)
+    base_domain = parsed.netloc.lower()
+
+    # 🔧 FIX: remove /page/{number} from base path
+    clean_path = re.sub(r'/page/\d+/?$', '', parsed.path)
+    base_url_clean = f"{parsed.scheme}://{parsed.netloc}{clean_path}"
+    base_len = len(base_url_clean.rstrip('/'))
 
     for a in soup.find_all('a', href=True):
         href = a['href']
-        if not href or '#' in href or 'javascript:' in href:
+
+        if not href or '#' in href or href.startswith('javascript:'):
             continue
 
         full_url = urljoin(base_url, href)
         link_domain = urlparse(full_url).netloc.lower()
 
-        # 1️⃣ Only same-domain links
+        # same domain only
         if link_domain != base_domain:
             continue
 
-        # 3️⃣ Only keep URLs at least 20 chars longer than the base
+        # 🔧 FIX: correct length comparison
         if len(full_url) < base_len + 20:
             continue
 
@@ -196,24 +237,53 @@ def get_article_links_from_page(html, base_url=None):
 
     return links
 
-# Extract external links from article content
-def get_external_links_from_html(html, useless_domains, base_url=None):
-    links = set()
 
-    try:
-        soup = BeautifulSoup(html, 'html.parser')
-        for a in soup.find_all('a', href=True):
-            href = a.get('href')
-            if not href:
-                continue
-            full = urljoin(base_url or '', href)
-            domain = urlparse(full).netloc.lower()
-            if domain and not any(u in domain for u in useless_domains):
-                # normalize
-                links.add(clean_domain(full))
-    except:
-        pass
+# Extract external links from article content
+# def get_external_links_from_html(html, useless_domains, base_url=None):
+#     links = set()
+
+#     try:
+#         soup = BeautifulSoup(html, 'html.parser')
+#         for a in soup.find_all('a', href=True):
+#             href = a.get('href')
+#             if not href:
+#                 continue
+#             full = urljoin(base_url or '', href)
+#             domain = urlparse(full).netloc.lower()
+#             if domain and not any(u in domain for u in useless_domains):
+#                 # normalize
+#                 links.add(clean_domain(full))
+#     except:
+#         pass
+#     return links
+def get_external_links_from_html(html, useless_domains, base_url=None):
+    """
+    Extract external links while strictly excluding useless domains
+    using substring matching.
+    """
+    links = set()
+    soup = BeautifulSoup(html, 'html.parser')
+
+    for a in soup.find_all('a', href=True):
+        href = a.get('href')
+        if not href:
+            continue
+
+        full = urljoin(base_url or '', href)
+        domain = urlparse(full).netloc.lower()
+
+        if not domain:
+            continue
+
+        # 🔧 FIX: strict substring exclusion
+        if any(useless in domain for useless in useless_domains):
+            continue
+
+        links.add(clean_domain(full))
+
     return links
+
+
 
 # For email finder: find candidate pages (contact/about/etc.) then scrape emails
 KEYWORDS = ['contact', 'about', 'privacy', 'policy', 'accessibility','disclaimer', 'author', 'terms', 'write', 'advertise','team','impressum','legal','conditions','cookies','support','help','faq','customer','service','press','media','get-in-touch','reach-us','who-we-are','our-story']
