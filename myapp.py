@@ -27,7 +27,7 @@ USELESS_SITES = set([
     'youtube.com','facebook.com','instagram.com','twitter.com','linkedin.com','tiktok.com',
     'pinterest.com','snapchat.com','google.com','unsplash.com','.gov','freepik.com','pexels.com',
     'pixabay.com','reddit.com','whatsapp.com','telegram.org','tumblr.com','discord.com','vimeo.com',
-    'x.com','bsky.app','threads.com','#','img','ibm.com','.edu','wikipedia.org'
+    'x.com','bsky.app','threads.com','#','img','ibm','.edu','wikipedia.org'
 ])
 
 # Simple URL validator
