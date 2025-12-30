@@ -22,12 +22,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 icon = Image.open(r"Fahad.png")
 st.set_page_config(page_title="Fahad Ikram", page_icon=icon, layout="wide")
 
-# ---------- Helpers (all in-memory, no files) ----------
 USELESS_SITES = set([
-    'youtube.com','facebook.com','instagram.com','twitter.com','linkedin.com','tiktok.com',
-    'pinterest.com','snapchat.com','google.com','unsplash.com','.gov','freepik.com','pexels.com',
+    'youtube','facebook','instagram','twitter','linkedin','tiktok',
+    'pinterest','snapchat','google','unsplash','.gov','freepik.com','pexels.com',
     'pixabay.com','reddit.com','whatsapp.com','telegram.org','tumblr.com','discord.com','vimeo.com',
-    'x.com','bsky.app','threads.com','#','img'
+    'x.com','bsky.app','threads.com','#','img','ibm','wikipedia','amazon.com','ebay.com','.edu','investopedia.com'
 ])
 
 # Simple URL validator
@@ -145,74 +144,66 @@ def generate_user_agents():
 
     return list(user_agents_set)
 
-agents = agents = random.choice(generate_user_agents())
+agents_list = generate_user_agents()
+# choose a random agent per request if needed
+def get_random_agent():
+    return random.choice(agents_list)
 
 
 
 # Fetch function (synchronous) with timeout
 def fetch_url(url, timeout=20):
     try:
-        headers = {'User-Agent': agents}
+        headers = {'User-Agent': get_random_agent()}
         r = requests.get(url, headers=headers, timeout=timeout)
         r.raise_for_status()
         return r.text
     except Exception as e:
         return ''
 
-# Extract article links by class name
-def get_article_links_from_page(html, base_url=None):
-    """
-    Automatically find internal article links without CSS class or pattern.
-    - Keeps only same-domain links.
-    - Skips contact/about/etc. pages.
-    - Keeps only links longer than base_url + 20 characters.
-    """
-    soup = BeautifulSoup(html, 'html.parser')
+# Extract articles from the given HTML page
+def get_article_links_from_page(html, classtaken=None):
     links = set()
-
-    if not base_url:
-        return links
-
-    base_domain = urlparse(base_url).netloc.lower()
-    base_len = len(base_url.rstrip('/'))
-
-    for a in soup.find_all('a', href=True):
-        href = a['href']
-        if not href or '#' in href or 'javascript:' in href:
-            continue
-
-        full_url = urljoin(base_url, href)
-        link_domain = urlparse(full_url).netloc.lower()
-
-        # 1️⃣ Only same-domain links
-        if link_domain != base_domain:
-            continue
-
-        # 3️⃣ Only keep URLs at least 20 chars longer than the base
-        if len(full_url) < base_len + 20:
-            continue
-
-        links.add(full_url)
-
+    soup = BeautifulSoup(html, 'html.parser')
+    for x in soup.find_all(class_=classtaken):
+        a_tag = x.find('a')
+        if a_tag and a_tag.get('href'):
+            links.add(a_tag['href'])
     return links
 
 # Extract external links from article content
-def get_external_links_from_html(html, useless_domains, base_url=None):
+def get_external_links_from_html(html, useless_domains, base_domain=None):
     links = set()
 
     try:
         soup = BeautifulSoup(html, 'html.parser')
+
         for a in soup.find_all('a', href=True):
             href = a.get('href')
             if not href:
                 continue
-            full = urljoin(base_url or '', href)
-            domain = urlparse(full).netloc.lower()
-            if domain and not any(u in domain for u in useless_domains):
-                # normalize
-                links.add(clean_domain(full))
+
+            # build full URL
+            full = urljoin(base_domain if base_domain else '', href)
+            if not urlparse(full).netloc:
+                continue
+            parsed = urlparse(full)
+
+            domain = parsed.netloc.lower()
+            if not domain:
+                continue
+
+            # same logic: skip useless domains (substring match)
+            if any(u in domain for u in useless_domains):
+                continue
+
+            # normalize
+            scheme = parsed.scheme or 'http'
+            links.add(f"{scheme}://{parsed.netloc}/")
+
     except:
         pass
+
     return links
 
 # For email finder: find candidate pages (contact/about/etc.) then scrape emails
@@ -542,9 +533,11 @@ def normalize_domain(url):
         return None
     try:
         parsed = urlparse(url)
-        domain = parsed.netloc or parsed.path   # handles urls like 'example.com'
-        domain = domain.replace("www.", "")     # remove www
-        return f"https://{domain}/"             # final uniform format
+        domain = parsed.netloc or parsed.path
+        if not domain:
+            return None
+        domain = domain.replace("www.", "")
+        return f"https://{domain}/"
     except:
         return None
 
@@ -563,116 +556,82 @@ if mode == 'Blog Research':
     concurrency = st.sidebar.slider('Max concurrent threads', min_value=10, max_value=100, value=20, step=5)
     col1, col2 = st.columns(2)
     with col1:
-        base_url = st.text_input('Website URL (e.g. https://example.com)')
+        given_url = st.text_input('Website URL (e.g. https://example.com)')
+        given_class = st.text_input('CSS Class (e.g. article-content)')
         page_mode = st.radio('Pages', ['Single Page', 'Multiple Pages'])
     with col2:
-        admin_upload = st.file_uploader('Optional: Upload admin list (.txt or .csv)', type=['txt','csv'])
-        all_or_new = st.radio('Add all data or just new entries', ['All Data', 'New Data'])
         if page_mode == 'Multiple Pages':
             start_page = st.number_input('Start page', min_value=1, value=1)
             end_page = st.number_input('End page', min_value=2, value=5)
-
     run = st.button('Run Blog Research')
-
     if run:
-        if not base_url:
+        if not given_url:
             st.error('Enter a valid URL')
-        elif not url_validator(base_url):
+        elif not url_validator(given_url):
             st.error('Enter a valid URL')
         else:
             t0 = time.time()
             fetch_msg = st.empty()
             fetch_msg.info('Fetching pages...')
 
+    # Get article pages
+        page_urls = [given_url]
+        if page_mode == 'Multiple Pages':
+            page_urls = generate_pages(given_url, int(start_page), int(end_page))
+        # Fetch listing pages
+        listing_html = parallel_fetch(page_urls, max_workers=concurrency)
 
+        # Extract article links from all listing pages
+        article_links = set()
+        for url, html in listing_html.items():
+            links = get_article_links_from_page(html, classtaken=given_class)
+            article_links.update(links)
 
-            # prepare admin avoid list
-            given_domain = get_base_url(base_url)
-            avoid_domains = set(USELESS_SITES) | {given_domain}
-            if admin_upload is not None:
-                try:
-                    text = admin_upload.getvalue().decode('utf-8')
-                except:
-                    text = str(admin_upload.getvalue())
-                for line in StringIO(text):
-                    d = line.strip()
-                    if d:
-                        avoid_domains.add(urlparse(d).netloc if url_validator(d) else d)
+        st.write(f'{len(article_links)} Articles Found!')
+        fetch_msg.empty()
 
-            # Get article pages
-            page_urls = [base_url]
-            if page_mode == 'Multiple Pages':
-                page_urls = generate_pages(base_url, int(start_page), int(end_page))
+        # Fetch all articles concurrently
+        article_html = parallel_fetch(article_links or [], max_workers=concurrency)
 
-            # Fetch listing pages
-            listing_html = parallel_fetch(page_urls, max_workers=concurrency)
+        # --- Progress bar ---
+        progress_text = st.empty()
+        progress_bar = st.progress(0)
 
-            # Extract article links
-            article_links = set()
-            for u, html in listing_html.items():
-                article_links.update(get_article_links_from_page(html, base_url=u))
+        total_articles = len(article_links)
+        processed = 0
+        rows = []
 
-            st.write(f'{len(article_links)} Articles Found!')
-            fetch_msg.empty()
-            # Fetch article pages and extract external links
-            # article_html = parallel_fetch(article_links or [], max_workers=concurrency)
-            # external_domains = set()
-            # for u, html in article_html.items():
-            #     external_domains.update(get_external_links_from_html(html, avoid_domains, base_url=u))
+        for u, html in article_html.items():
+            processed += 1
+            progress_bar.progress(int((processed / total_articles) * 100))
+            progress_text.info(f"Processing articles: {processed}/{total_articles}")
+            links = get_external_links_from_html(html, USELESS_SITES, base_domain=u)
+            for link in links:
+                rows.append({'source_article': u, 'client_url': link})
 
-            # # Convert to dataframe (unique)
-            # df = pd.DataFrame(sorted(external_domains), columns=['client_url'])
+        # Clear progress UI
+        progress_bar.empty()
+        progress_text.empty()
 
-            # # Simulate all/new behaviour: if 'New Data' we simply remove duplicates in the shown dataframe (virtual)
-            # if all_or_new == 'New Data':
-            #     df = df.drop_duplicates()
+        # Create DataFrame
+        if rows:
+            df = pd.DataFrame(rows)
+            df['client_url'] = df['client_url'].apply(normalize_domain)
+            df = df.drop_duplicates(subset=['client_url']).reset_index(drop=True)
+        else:
+            df = pd.DataFrame(columns=['source_article', 'client_url'])
 
-            # st.success(f'Done — extracted {len(df)} external client URLs in {time.time()-t0:.1f}s')
-            # st.dataframe(df)
+        st.success(
+            f"Extracted {len(set(df['client_url']))} Unique Clients. \n"
+            f"Total articles: {len(set(df['source_article']))}. \n"
+            f"Time Taken: {time.time() - t0:.1f}s."
+        )
 
-            # csv_bytes = df.to_csv(index=False).encode('utf-8')
-            # st.download_button('Download CSV', data=csv_bytes, file_name='clients.csv', mime='text/csv')
-            article_html = parallel_fetch(article_links or [], max_workers=concurrency)
+        st.dataframe(df)
 
-            # --- Progress bar ---
-            progress_text = st.empty()
-            progress_bar = st.progress(0)
+        csv_bytes = df.to_csv(index=False).encode('utf-8')
+        st.download_button('Download CSV', data=csv_bytes, file_name='clients.csv', mime='text/csv')
 
-            total_articles = len(article_links)
-            processed = 0
-
-            rows = []
-            for u, html in article_html.items():
-                processed += 1
-                progress_bar.progress(processed / total_articles)
-                progress_text.info(f"Processing articles: {processed}/{total_articles}")
-                links = get_external_links_from_html(html, avoid_domains, base_url=u)
-                for link in links:
-                    rows.append({'source_article': u, 'client_url': link})
-            # Clear progress UI
-            progress_bar.empty()
-            progress_text.empty()
-            if rows:
-                df = pd.DataFrame(rows)
-                df['client_url'] = df['client_url'].apply(normalize_domain)
-                # drop duplicates
-                df = df.drop_duplicates(subset=['client_url']).reset_index(drop=True)
-            else:
-                df = pd.DataFrame(columns=['source_article', 'client_url'])
-
-            if all_or_new == 'New Data':
-                df = df.drop_duplicates(subset=['client_url'])
-
-            st.success(
-                f"Extracted {len(set(df['client_url']))} Unique Clients. \n"
-                f"Total articles: {len(set(df['source_article']))}. \n"
-                f"Time Taken: {time.time() - t0:.1f}s."
-            )
-
-            st.dataframe(df)
-
-            csv_bytes = df.to_csv(index=False).encode('utf-8')
-            st.download_button('Download CSV', data=csv_bytes, file_name='clients.csv', mime='text/csv')
 
 
 elif mode == 'Email Finder':
