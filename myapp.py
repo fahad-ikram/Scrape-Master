@@ -656,16 +656,16 @@ if mode == 'Blog Research':
                 df = pd.DataFrame(rows)
                 df['client_url'] = df['client_url'].apply(normalize_domain)
                 # drop duplicates
-                df = df = df.drop_duplicates().reset_index(drop=True)
+                df = df.drop_duplicates(subset=['client_url']).reset_index(drop=True)
             else:
                 df = pd.DataFrame(columns=['source_article', 'client_url'])
 
             if all_or_new == 'New Data':
-                df = df.drop_duplicates()
+                df = df.drop_duplicates(subset=['client_url'])
 
             st.success(
                 f"Extracted {len(set(df['client_url']))} Unique Clients. \n"
-                f"Total articles: {len(df['source_article'])}. \n"
+                f"Total articles: {len(set(df['source_article']))}. \n"
                 f"Time Taken: {time.time() - t0:.1f}s."
             )
 
