@@ -189,7 +189,7 @@ def get_article_links_from_page(html, base_url=None):
             continue
 
         # 3️⃣ Only keep URLs at least 20 chars longer than the base
-        if len(full_url) < base_len + 15:
+        if len(full_url) < base_len + 20:
             continue
 
         links.add(full_url)
